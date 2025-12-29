@@ -14,7 +14,7 @@ if (!loggedInUser) {
 async function checkUserAlreadySubmitted(username) {
   try {
     const res = await fetch(
-      `https://keylogger-backend.vercel.app/api/check-user?username=${encodeURIComponent(username)}`
+      `https://data-collector-backend-teal.vercel.app/api/check-user?username=${encodeURIComponent(username)}`
     );
 
     const data = await res.json();
@@ -151,14 +151,13 @@ submitBtn.onclick = async () => {
 
   try {
     const res = await fetch(
-      "https://keylogger-backend.vercel.app/api/submit",
+      "https://data-collector-backend-teal.vercel.app/api/submit",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       }
     );
-
     if (!res.ok) throw new Error();
 
     alert("✅ Test submitted successfully");
