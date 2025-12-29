@@ -7,13 +7,13 @@ loginBtn.onclick = () => {
   const username = usernameInput.value.trim().toLowerCase();
 
   if (!emailRegex.test(username)) {
-    alert("Enter valid institute email");
+    alert("Enter valid institute email: <enrollment>@diu.iiitvadodara.ac.in");
     return;
   }
 
-  // Save user
+  // Save username for test page
   localStorage.setItem("loggedInUser", username);
 
-  // Go to test page
+  // Redirect to test page
   window.location.href = "test.html";
 };

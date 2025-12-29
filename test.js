@@ -5,25 +5,7 @@ const loggedInUser = localStorage.getItem("loggedInUser");
 
 if (!loggedInUser) {
   alert("Please login first");
-  window.location.href = "login.html";
-}
-
-/* ===============================
-   API CHECK FUNCTION
-   =============================== */
-async function checkUserAlreadySubmitted(username) {
-  try {
-    const res = await fetch(
-      `https://data-collector-backend-teal.vercel.app/api/check-user?username=${encodeURIComponent(username)}`
-    );
-
-    const data = await res.json();
-    return data.exists === true;
-
-  } catch (err) {
-    alert("Unable to verify test status");
-    throw err;
-  }
+  window.location.href = "index.html"; // or login.html
 }
 
 /* ===============================
@@ -48,41 +30,57 @@ const timerDisplay = document.getElementById("timer");
 const referenceTextEl = document.getElementById("referenceText");
 
 /* ===============================
-   WORDS
+   SECURITY BLOCKS
    =============================== */
-const WORDS = [
-  "time","people","computer","keyboard","software",
-  "frontend","backend","security","performance","cloud"
+document.addEventListener("contextmenu", e => e.preventDefault());
+
+["copy", "paste", "cut", "drop"].forEach(evt =>
+  document.addEventListener(evt, e => e.preventDefault())
+);
+
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && ["c", "v", "x"].includes(e.key.toLowerCase())) {
+    e.preventDefault();
+  }
+});
+
+/* ===============================
+   WORD GENERATOR
+   =============================== */
+const DICTIONARY = [
+  "time","people","year","day","world","life","computer","keyboard","software",
+  "network","frontend","backend","security","performance","cloud","data",
+  "algorithm","logic","system","analysis","design","development","testing"
 ];
 
-function randomWords(count = 25) {
-  let arr = [];
+function generateRandomWords(count = 25) {
+  let words = [];
   for (let i = 0; i < count; i++) {
-    arr.push(WORDS[Math.floor(Math.random() * WORDS.length)]);
+    words.push(DICTIONARY[Math.floor(Math.random() * DICTIONARY.length)]);
   }
-  return arr.join(" ");
+  return words.join(" ");
 }
 
 let referenceText = "";
 
-function loadWords() {
-  referenceText = randomWords();
+function loadInitialWords() {
+  referenceText = generateRandomWords();
   referenceTextEl.textContent = referenceText;
+}
+
+function extendWordsIfNeeded(typedLength) {
+  if (typedLength + 100 > referenceText.length) {
+    referenceText += " " + generateRandomWords(20);
+    referenceTextEl.textContent = referenceText;
+  }
 }
 
 /* ===============================
    START TEST
    =============================== */
-startBtn.onclick = async () => {
-  const alreadySubmitted = await checkUserAlreadySubmitted(loggedInUser);
-
-  if (alreadySubmitted) {
-    alert("❌ You already gave the test");
-    return;
-  }
-
-  // Reset
+startBtn.onclick = () => {
   keyDownTimes = {};
+  lastKeyReleaseTime = null;
   individualKeys = [];
   digraphs = [];
   testCompleted = false;
@@ -95,40 +93,66 @@ startBtn.onclick = async () => {
   startBtn.disabled = true;
   submitBtn.disabled = true;
 
-  loadWords();
+  loadInitialWords();
   timerDisplay.textContent = "Time Left: 0:30";
 
   timerInterval = setInterval(() => {
     duration--;
-    timerDisplay.textContent = `Time Left: 0:${String(duration).padStart(2, "0")}`;
+
+    timerDisplay.textContent =
+      `Time Left: ${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, "0")}`;
 
     if (duration <= 0) {
       clearInterval(timerInterval);
       area.disabled = true;
       testCompleted = true;
       submitBtn.disabled = false;
-      alert("Time over! Submit now.");
+      alert("Time Over! You can now submit.");
     }
   }, 1000);
 };
 
 /* ===============================
-   KEYSTROKE CAPTURE
+   TYPING EVENTS
    =============================== */
+area.addEventListener("input", () => {
+  extendWordsIfNeeded(area.value.length);
+});
+
 area.addEventListener("keydown", e => {
-  if (!keyDownTimes[e.code]) keyDownTimes[e.code] = performance.now();
+  if (!keyDownTimes[e.code]) {
+    keyDownTimes[e.code] = performance.now();
+  }
 });
 
 area.addEventListener("keyup", e => {
-  const release = performance.now();
-  const press = keyDownTimes[e.code];
-  if (!press) return;
+  const releaseTime = performance.now();
+  const pressTime = keyDownTimes[e.code];
+  if (!pressTime) return;
+
+  const holdTime = releaseTime - pressTime;
+  const flightTime = lastKeyReleaseTime
+    ? pressTime - lastKeyReleaseTime
+    : 0;
 
   individualKeys.push({
     key: e.key,
-    holdTime: release - press
+    code: e.code,
+    holdTime_HT: holdTime,
+    flightTime_FT: flightTime
   });
 
+  if (individualKeys.length >= 2) {
+    const k1 = individualKeys[individualKeys.length - 2];
+    const k2 = individualKeys[individualKeys.length - 1];
+
+    digraphs.push({
+      digraph: k1.key + k2.key,
+      D: k2.holdTime_HT + k2.flightTime_FT
+    });
+  }
+
+  lastKeyReleaseTime = releaseTime;
   delete keyDownTimes[e.code];
 });
 
@@ -142,7 +166,7 @@ submitBtn.onclick = async () => {
 
   const payload = {
     username: loggedInUser,
-    typedText: area.value,
+    typedText: area.value.trim(),
     charCount: area.value.length,
     timestamp: new Date().toISOString(),
     individualKeys,
@@ -150,7 +174,7 @@ submitBtn.onclick = async () => {
   };
 
   try {
-    const res = await fetch(
+    const response = await fetch(
       "https://data-collector-backend-teal.vercel.app/api/submit",
       {
         method: "POST",
@@ -158,12 +182,13 @@ submitBtn.onclick = async () => {
         body: JSON.stringify(payload)
       }
     );
-    if (!res.ok) throw new Error();
 
-    alert("✅ Test submitted successfully");
+    if (!response.ok) throw new Error();
 
-  } catch {
-    alert("Submission failed");
+    alert("Data submitted successfully");
+
+  } catch (err) {
+    alert("Submission failed. Try again.");
     submitBtn.disabled = false;
   }
 };
